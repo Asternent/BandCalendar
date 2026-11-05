@@ -1,0 +1,14 @@
+signing/
+band/sign/
+node_modules/
+band/build/
+band/dist/
+android/build/
+android/libs/*.jar
+dist/
+*.log
+vendor/
+test/build/
+test/phone-*
+.temp_band/
+__pycache__/

@@ -1,0 +1,60 @@
+{
+  "scope": "Host Node.js model CPU only; excludes Vela rendering, hardware input, Bluetooth and storage.",
+  "node": "v24.19.0",
+  "baseline": "0.1.4 delivered source",
+  "candidate": "0.2.0",
+  "results": [
+    {
+      "scenario": "cold_month_grid",
+      "beforeMedianMicroseconds": 121.53500000000008,
+      "afterMedianMicroseconds": 118.38250000000005,
+      "speedup": 1.0266297805841238,
+      "iterationsPerSample": 1000,
+      "samples": 7
+    },
+    {
+      "scenario": "revisit_three_months",
+      "beforeMedianMicroseconds": 0.3297500000000279,
+      "afterMedianMicroseconds": 0.3414999999999206,
+      "speedup": 0.9655929721818582,
+      "iterationsPerSample": 1200,
+      "samples": 7
+    },
+    {
+      "scenario": "month_render_model",
+      "beforeMedianMicroseconds": 199.58399999999983,
+      "afterMedianMicroseconds": 203.30249999999978,
+      "speedup": 0.9817095215258054,
+      "iterationsPerSample": 600,
+      "samples": 7
+    },
+    {
+      "scenario": "select_day_and_detail_model",
+      "beforeMedianMicroseconds": 30.596125000000143,
+      "afterMedianMicroseconds": 40.445249999999646,
+      "speedup": 0.7564825288507404,
+      "iterationsPerSample": 800,
+      "samples": 7
+    }
+  ],
+  "structuralBefore": {
+    "retainedSlotsAcrossMonth": 42,
+    "initialDetailDecodes": 0,
+    "detailDecodesAfterMonthChanges": 0,
+    "cellTemplateNodes": 168
+  },
+  "structuralAfter": {
+    "retainedSlotsAcrossMonth": 42,
+    "initialDetailDecodes": 0,
+    "detailDecodesAfterMonthChanges": 0,
+    "cellTemplateNodes": 168
+  },
+  "worldIndexBytesBefore": 115811,
+  "worldIndexBytesAfter": 115811,
+  "cacheBounds": {
+    "basic": 64,
+    "months": 3,
+    "worldDays": 0,
+    "worldDecodes": 0
+  }
+}

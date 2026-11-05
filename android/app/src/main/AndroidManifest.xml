@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.bandcalendar.sync" android:versionCode="6" android:versionName="0.2.0">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <queries><package android:name="com.mi.health"/><package android:name="com.xiaomi.wearable"/><package android:name="moe.astralsight.astrobox"/></queries>
+  <application android:label="腕上日曆同步器" android:icon="@drawable/icon" android:theme="@style/Theme.BandCalendar" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
+    <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+    <provider android:name=".BandPackageProvider" android:authorities="com.bandcalendar.sync.band" android:exported="false" android:grantUriPermissions="true"/>
+  </application>
+</manifest>

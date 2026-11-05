@@ -1,0 +1,237 @@
+<template>
+  <div class="root" style="height: {{ viewportHeight }}px">
+    <list show="{{ !detail && !legal }}" class="screen" style="height: {{ viewportHeight }}px">
+      <list-item type="head" class="head-item">
+        <div class="head">
+          <div class="title-row"><text class="title">腕上日曆</text><text class="today" @click="goToday">今天</text></div>
+          <div class="month-row"><text class="arrow" @click="previous">‹</text><text class="month-title">{{ monthTitle }}</text><text class="arrow" @click="next">›</text></div>
+        </div>
+      </list-item>
+      <list-item type="month-break" class="month-break-item"><div class="month-break"><text class="break-title">{{ monthBreakTitle }}</text><text class="break-range">{{ monthBreakRange }}</text></div></list-item>
+      <list-item type="date-colors" class="date-colors-item"><div class="date-colors"><text class="legend-rest">紅：放假</text><text class="legend-work">綠：補班</text><text class="legend-weekend">藍：週末</text></div></list-item>
+      <list-item type="weeknames" class="weeknames-item"><div class="weeknames"><text for="{{ weekdays }}" class="weekday">{{ $item }}</text></div></list-item>
+      <list-item type="week" for="{{ weeks }}" class="week-item">
+        <div class="week"><div for="{{ $item.days }}" class="cell" style="background-color: {{ $item.background }}" @click="selectDate($item.key)">
+          <text class="day" style="color: {{ $item.color }}">{{ $item.day }}</text><text class="badge" style="color: {{ $item.badgeColor }}">{{ $item.badge }}</text>
+          <text class="lunar" style="color: {{ $item.subColor }}">{{ $item.label }}</text>
+        </div></div>
+      </list-item>
+      <list-item type="selection" class="selection-item"><div class="selection" @click="openDetail">
+        <text class="selected-date">{{ selectedLabel }} · {{ selectedLunar }}</text><text class="selected-rest" style="color: {{ selectedRestColor }}">{{ selectedRest }}</text><text class="selected-event">{{ selectedEvent }}</text><text class="small">{{ selectedStatus }} · 點選查看</text>
+      </div></list-item>
+      <list-item type="scope" class="scope-item"><div class="foot-content"><text class="scope" @click="toggleScope">國別節日：{{ scopeLabel }} ▾</text><text class="small">日期分色只依大陸安排</text><text class="small">藍色週末按週休二日參考</text><text class="small">節日 2025–2028 · 調休 2025–2026</text><text class="small">{{ syncStatus }}</text><text class="sync" @click="requestSync">同步手機設定</text><text class="sync" @click="openLegal">資料來源與免責聲明</text></div></list-item>
+    </list>
+    <list id="detail-list" if="{{ detailReady }}" show="{{ detail && !legal }}" class="screen" style="height: {{ viewportHeight }}px">
+      <list-item type="back" class="back-item"><text class="back" @click="closeDetail">‹ 返回月曆</text></list-item>
+      <list-item type="detailhead" class="detail-head-item"><div class="detail-head">
+        <text class="detail-date">{{ detailDate }}</text><text class="detail-lunar">{{ detailLunar }}</text><text class="detail-status">{{ selectedStatus }}</text><text class="selected-rest" style="color: {{ selectedRestColor }}">{{ selectedRest }}</text><text class="small">{{ detailCount }}</text>
+      </div></list-item>
+      <list-item type="empty" if="{{ detailEvents.length === 0 }}" class="empty-item"><text class="empty">當日未收錄節日</text></list-item>
+      <list-item type="event" for="{{ detailEvents }}" class="event-item" style="height: {{ $item.height }}px"><div class="event-content" style="height: {{ $item.height - 8 }}px">
+        <text class="event-kind" style="color: {{ $item.color }}">{{ $item.kindLabel }}</text><text class="event-name" style="height: {{ $item.titleHeight }}px">{{ $item.n }}</text><text class="event-country">{{ $item.c }}</text>
+      </div></list-item>
+      <list-item type="pager" if="{{ detailPages > 1 }}" class="pager-item"><div class="pager"><text class="page-button" @click="previousDetailPage">‹ 上頁</text><text class="page-label">{{ detailPageLabel }}</text><text class="page-button" @click="nextDetailPage">下頁 ›</text></div></list-item>
+      <list-item type="notice" class="notice-item"><div class="notice"><text class="small">各國公眾假期僅供參考，未來或宗教日期可能調整；不含所有地方假期。</text><text class="small">只以「休／班」標記大陸官方調休。更多原名與適用地區見手機。</text><text class="small">資料：Python holidays 0.87、香港天文台、國務院、聯合國。</text></div></list-item>
+    </list>
+    <list if="{{ legal }}" class="screen" style="height: {{ viewportHeight }}px">
+      <list-item type="legal-back" class="back-item"><text class="back" @click="closeLegal">‹ 返回日曆</text></list-item>
+      <list-item type="legal-source" class="legal-source"><text class="legal-text">全球節日：Python holidays 0.87（MIT）。地區名稱：Babel / CLDR。大陸調休：國務院 2025／2026 通知。國際紀念日：聯合國。完整授權附於安裝包，亦可在手機「資料來源與授權」閱讀。</text></list-item>
+      <list-item type="legal-paragraph" for="{{ legalParagraphs }}" class="legal-item"><text class="legal-text">{{ $item }}</text></list-item>
+    </list>
+  </div>
+</template>
+<script>
+import interconnect from '@system.interconnect'
+import storage from '@system.storage'
+import device from '@system.device'
+const calendar=require('../../common/calendar')
+const protocol=require('../../common/protocol')
+const legalParagraphs=require('../../common/legal')
+const kinds={rest:'大陸官方放假',work:'大陸官方補班',regional:'大陸節日／紀念日',traditional:'傳統節日',global:'國際／民俗節日',solar:'二十四節氣',national:'國別公眾假期'}
+export default {
+  private:{viewportHeight:456,monthTitle:'',monthBreakTitle:'',monthBreakRange:'',selectedRest:'',selectedRestColor:'#CAC4D0',weeks:[],weekdays:[],selectedLabel:'',selectedLunar:'',selectedEvent:'',selectedStatus:'',scopeLabel:'全球',syncStatus:'離線資料已內建',detail:false,detailEvents:[],detailDate:'',detailLunar:'',detailCount:'',detailReady:false,detailPages:1,detailPageLabel:'1 / 1',legal:false,legalParagraphs:legalParagraphs},
+  onInit(){
+    this.settings=calendar.defaults();this.saved=null;this.saving=false;this.alive=true;this.gridStamp="";this.gridSelected="";this.detailCache=[];this.detailPage=0;this.scrollGeneration=0;this.hidden=false
+    this.selected=calendar.valid(calendar.today())?calendar.today():calendar.data.minDate;this.monthKey=this.selected.slice(0,7)+'-01';this.render()
+    device.getInfo({success:(d)=>{if(this.alive&&d.screenWidth>0&&d.screenHeight>0)this.viewportHeight=Math.max(300,Math.round(d.screenHeight/d.screenWidth*336)-24)},fail:()=>{}})
+    storage.get({key:'bandcalendar-settings-v1',success:(raw)=>{
+      if(!this.alive)return;try{const p=JSON.parse(raw);if(protocol.validSaved(p)&&(!this.saved||Number(p.id)>Number(this.saved.id))&&!this.saving){this.saved=p;this.settings=p.settings;this.render()}}catch(e){}
+      this.hello()
+    },fail:()=>this.hello()})
+  },
+  onReady(){this.startBridge()},
+  startBridge(){
+    if(this.connection||!this.alive)return
+    this.connection=interconnect.instance()
+    this.connection.onopen=()=>{this.send({type:'hello',v:1});this.syncStatus='手機已連線'}
+    this.connection.onclose=()=>{this.syncStatus='離線可用 · 已保留設定'}
+    this.connection.onerror=()=>{this.syncStatus='手機未連線 · 日曆仍可用'}
+    this.connection.onmessage=(event)=>this.receive(event.data)
+    this.hello()
+  },
+  onShow(){this.hidden=false;const today=calendar.today();if(this.lastToday&&today!==this.lastToday&&this.selected===this.lastToday)this.goToday();else this.render();this.lastToday=today},
+  onHide(){this.hidden=true;this.scrollGeneration++},
+  hello(){if(!this.connection||!this.alive)return;this.connection.getReadyState({success:(s)=>{if(this.alive&&s.status===1)this.send({type:'hello',v:1})},fail:()=>{}})},
+  send(p){if(this.connection)this.connection.send({data:p,success:()=>{},fail:()=>{}})},
+  receive(raw){
+    const p=protocol.parse(raw);if(!protocol.validPacket(p)||!this.alive)return
+    if(this.saved&&Number(p.id)<Number(this.saved.id))return
+    if(this.saved&&p.id===this.saved.id){this.send(calendar.sameSettings(p.settings,this.saved.settings)?protocol.ack(p):{type:'nack',v:1,id:p.id});return}
+    if(this.saving)return
+    this.saving=true
+    storage.set({key:'bandcalendar-settings-v1',value:JSON.stringify(p),success:()=>{
+      this.saving=false;if(!this.alive)return
+      this.saved=p;this.settings=p.settings;this.render();this.syncStatus='手機設定已儲存';this.send(protocol.ack(p))
+      if(this.waitTimer)clearTimeout(this.waitTimer)
+    },fail:()=>{this.saving=false;if(!this.alive)return;this.syncStatus='儲存失敗，原設定保留';this.send({type:'nack',v:1,id:p.id})}})
+  },
+  requestSync(){if(!this.connection)this.startBridge();this.syncStatus='正在請求手機設定…';this.send({type:'refresh',v:1});if(this.waitTimer)clearTimeout(this.waitTimer);this.waitTimer=setTimeout(()=>{this.syncStatus='請開啟手機同步器 · 日曆離線可用'},12000)},
+  render(){
+    if(this.hidden||this.legal)return
+    if(!this.detail)this.renderGrid()
+    this.renderSelection()
+    if(this.detail)this.prepareDetail()
+  },
+  patch(target,values){const keys=Object.keys(values);for(let i=0;i<keys.length;i++){const key=keys[i];if(target[key]!==values[key])target[key]=values[key]}},
+  renderGrid(){
+    const today=calendar.today(),stamp=this.monthKey+'|'+calendar.settingsKey(this.settings)+'|'+today
+    if(stamp!==this.gridStamp){
+      this.monthTitle=this.monthKey.slice(0,4)+'年 '+Number(this.monthKey.slice(5,7))+'月'
+      this.weekdays=this.settings.monday?['一','二','三','四','五','六','日']:['日','一','二','三','四','五','六']
+      const runs=calendar.monthBreaks(this.monthKey),monthRest=calendar.restInfo(this.monthKey)
+      this.monthBreakTitle=runs.length?'本月：'+runs.map(r=>r.name+r.days+'天').join('／'):monthRest&&monthRest.covered?'本月無官方調休假期':'本年大陸調休未收錄'
+      this.monthBreakRange=runs.length?runs.map(r=>this.shortDate(r.start)+'–'+this.shortDate(r.end)+(r.start.slice(0,7)!==r.end.slice(0,7)?'（跨月）':'')).join('、'):monthRest&&monthRest.covered?'一般週末按週休二日參考':'不推算假期或補班'
+      const cells=calendar.month(this.monthKey,this.settings.monday,this.settings),create=this.weeks.length!==6,weeks=create?[]:this.weeks
+      this.cellIndexes={}
+      for(let r=0;r<6;r++){const days=create?[]:weeks[r].days;for(let col=0;col<7;col++){
+        const c=cells[r*7+col],selected=c.key===this.selected,normal=c.restKind==='holiday'?'#FFB4AB':c.restKind==='work'?'#94D99A':c.restKind==='weekend'?'#A8C7FA':!c.inside?'#625C68':'#E6E0E9'
+        const normalBg=!c.inside?'#141218':c.restKind==='holiday'?'#38242A':c.restKind==='work'?'#1B3026':c.restKind==='weekend'?'#1B293C':'#141218'
+        const markColor=c.markerKind==='work'?'#94D99A':c.markerKind==='rest'?'#FFB4AB':c.markerShort?'#D0BCFF':'#AEA8B4'
+        const next={key:c.key,day:c.day,badge:c.badge||(c.key===today?'今':''),label:c.markerShort||c.lunar,normalBg:normalBg,restKind:c.restKind,background:selected?'#4F378B':normalBg,color:normal,normalSub:!c.inside?'#625C68':markColor,subColor:!c.inside?'#625C68':selected?'#EADDFF':markColor,badgeColor:c.badge==='班'?'#94D99A':c.badge==='休'?'#FFB4AB':'#D0BCFF'}
+        if(create)days.push(next);else this.patch(days[col],next)
+        this.cellIndexes[c.key]=[r,col]
+      }if(create)weeks.push({days:days})}
+      if(create)this.weeks=weeks;this.gridStamp=stamp
+    }else if(this.selected!==this.gridSelected){
+      this.highlight(this.gridSelected,false);this.highlight(this.selected,true)
+    }
+    this.gridSelected=this.selected
+  },
+  renderSelection(){
+    const stamp=this.selected+'|'+calendar.settingsKey(this.settings)
+    if(stamp===this.summaryStamp)return
+    this.summaryStamp=stamp;this.scopeLabel=calendar.countryName(this.settings.country)
+    const d=this.detail?this.selectedInfo():calendar.preview(this.selected,this.settings);if(!d)return
+    const rest=calendar.restInfo(this.selected);this.selectedRestColor=rest.kind==='holiday'?'#FFB4AB':rest.kind==='work'?'#94D99A':rest.kind==='weekend'?'#A8C7FA':'#CAC4D0';this.selectedRest=rest.kind==='holiday'?'連休'+rest.days+'天 · '+this.shortDate(rest.start)+'–'+this.shortDate(rest.end):rest.kind==='work'?'補班日 · 非休假':rest.kind==='weekend'?'一般週末 · 週休二日參考':rest.kind==='unknown'?'本年調休未收錄':'一般平日'
+    this.selectedLabel=Number(this.selected.slice(5,7))+'/'+Number(this.selected.slice(8));this.selectedLunar=d.lunar?d.lunar.text:'';this.selectedStatus=d.status
+    const count=d.events?d.events.length:d.eventCount,first=d.events?(count?d.events[0].n:''):d.firstEvent
+    this.selectedEvent=count?(first+(count>1?' · 另'+(count-1)+'組':'')):'當日未收錄節日'
+  },
+  highlight(key,selected){const index=this.cellIndexes[key];if(!index)return;const c=this.weeks[index[0]].days[index[1]];c.background=selected?'#4F378B':c.normalBg;c.subColor=selected?'#EADDFF':c.normalSub},
+  shortDate(s){return Number(s.slice(5,7))+'/'+Number(s.slice(8))},
+  selectedInfo(){
+    const k=this.selected+'|'+calendar.settingsKey(this.settings)
+    for(let i=this.detailCache.length-1;i>=0;i--)if(this.detailCache[i].key===k)return this.detailCache[i].info
+    const info=calendar.info(this.selected,this.settings,true);if(info){this.detailCache.push({key:k,info:info});if(this.detailCache.length>4)this.detailCache.shift()}return info
+  },
+  prepareDetail(){
+    const d=this.selectedInfo();if(!d)return
+    const stamp=this.selected+'|'+calendar.settingsKey(this.settings)
+    if(stamp===this.detailStamp)return
+    this.detailStamp=stamp;this.detailPage=0
+    this.detailDate=this.selected+' 星期'+['日','一','二','三','四','五','六'][d.weekday]
+    this.detailLunar=d.lunar?d.lunar.year+' · '+d.lunar.zodiac+' · '+d.lunar.text:''
+    this.detailCount=d.events.length+' 組節日 · 國別範圍：'+this.scopeLabel
+    this.detailPages=Math.max(1,Math.ceil(d.events.length/8));this.applyDetailPage();this.detailReady=true;this.resetDetailScroll()
+  },
+  applyDetailPage(){
+    const d=this.selectedInfo();this.detailPageLabel=(this.detailPage+1)+' / '+this.detailPages
+    const next=d.events.slice(this.detailPage*8,this.detailPage*8+8).map(e=>{
+      const name=e.n.length>96?e.n.slice(0,95)+'…':e.n
+      const titleHeight=Math.max(28,Math.ceil(name.length/( /[^\x00-\x7F]/.test(name)?12:22))*28)
+      return {n:name,c:e.c,kindLabel:kinds[e.kind],color:e.kind==='work'?'#94D99A':e.kind==='rest'?'#FFB4AB':'#D0BCFF',titleHeight:titleHeight,height:titleHeight+102}
+    })
+    while(this.detailEvents.length>next.length)this.detailEvents.pop()
+    for(let i=0;i<next.length;i++){if(i<this.detailEvents.length)this.patch(this.detailEvents[i],next[i]);else this.detailEvents.push(next[i])}
+  },
+  resetDetailScroll(){
+    const generation=++this.scrollGeneration,stamp=this.detailStamp
+    const reset=()=>{if(!this.alive||this.hidden||this.legal||!this.detail||generation!==this.scrollGeneration||stamp!==this.detailStamp||!this.$element)return;const list=this.$element('detail-list');if(list)list.scrollTo({index:0,behavior:'instant'})}
+    if(this.$nextTick)this.$nextTick(reset);else{if(this.pageTimer)clearTimeout(this.pageTimer);this.pageTimer=setTimeout(reset,0)}
+  },
+  changeDetailPage(delta){const page=Math.max(0,Math.min(this.detailPages-1,this.detailPage+delta));if(page===this.detailPage)return;this.detailPage=page;this.applyDetailPage();this.resetDetailScroll()},
+  previousDetailPage(){this.changeDetailPage(-1)},nextDetailPage(){this.changeDetailPage(1)},
+  selectDate(key){if(!calendar.valid(key))return;this.selected=key;this.monthKey=key.slice(0,7)+'-01';this.detail=true;this.render()},
+  openDetail(){this.detail=true;this.prepareDetail()},closeDetail(){this.scrollGeneration++;this.detail=false;this.render()},
+  previous(){const s=calendar.shiftMonth(this.monthKey,-1);if(s){this.monthKey=s;this.selected=s;this.render()}},
+  next(){const s=calendar.shiftMonth(this.monthKey,1);if(s){this.monthKey=s;this.selected=s;this.render()}},
+  goToday(){const s=calendar.today();if(calendar.valid(s)){this.selected=s;this.monthKey=s.slice(0,7)+'-01';this.detail=false;this.render()}else this.syncStatus='此版本支援 2025–2028 年'},
+  toggleScope(){this.settings=Object.assign({},this.settings,{country:this.settings.country==='ALL'?'CN':'ALL'});this.render();this.syncStatus='僅本次瀏覽範圍；可從手機同步設定'},
+  openLegal(){this.legal=true},closeLegal(){this.legal=false;this.render()},
+  onBackPress(){if(this.legal){this.closeLegal();return true}if(this.detail){this.closeDetail();return true}return false},
+  onDestroy(){this.alive=false;this.scrollGeneration++;if(this.pageTimer)clearTimeout(this.pageTimer);this.detailCache=[];if(this.waitTimer)clearTimeout(this.waitTimer);if(this.connection){this.connection.onopen=null;this.connection.onclose=null;this.connection.onerror=null;this.connection.onmessage=null}}
+}
+</script>
+<style>
+.root{width:336px;background-color:#141218;flex-direction:column;align-items:center;}
+.screen{width:336px;}
+.head-item{width:336px;height:72px;}
+.head{width:308px;height:72px;flex-direction:column;margin-left:14px;}
+.title-row{width:308px;height:32px;align-items:center;justify-content:space-between;}
+.title{font-size:22px;color:#E6E0E9;}
+.today{font-size:19px;color:#D0BCFF;padding:8px;}
+.month-row{width:308px;height:40px;align-items:center;justify-content:space-between;}
+.arrow{width:48px;height:40px;text-align:center;font-size:32px;color:#D0BCFF;}
+.month-title{font-size:25px;color:#E6E0E9;}
+.month-break-item{width:336px;height:52px;}
+.month-break{width:304px;margin-left:16px;height:52px;flex-direction:column;}
+.break-title{font-size:18px;height:26px;color:#FFB4AB;}
+.break-range{font-size:15px;height:22px;color:#CAC4D0;}
+.date-colors-item{width:336px;height:22px;}
+.date-colors{width:304px;margin-left:16px;height:22px;justify-content:space-between;}
+.legend-rest{font-size:14px;color:#FFB4AB;}
+.legend-work{font-size:14px;color:#94D99A;}
+.legend-weekend{font-size:14px;color:#A8C7FA;}
+.selected-rest{font-size:18px;height:28px;}
+.weeknames-item{width:336px;height:26px;}
+.weeknames{width:308px;height:26px;margin-left:14px;}
+.weekday{width:44px;height:26px;font-size:17px;text-align:center;color:#CAC4D0;}
+.week-item{width:336px;height:46px;}
+.week{width:308px;height:46px;margin-left:14px;}
+.cell{position:relative;width:44px;height:45px;border-radius:10px;flex-direction:column;align-items:center;}
+.day{position:absolute;left:0px;top:0px;width:32px;height:27px;font-size:23px;text-align:center;}
+.badge{position:absolute;right:0px;top:6px;font-size:11px;width:12px;height:13px;}
+.lunar{position:absolute;left:0px;top:27px;font-size:12px;width:44px;height:17px;text-align:center;}
+.selection-item{width:336px;height:152px;}
+.selection{width:304px;height:144px;margin-left:16px;margin-top:4px;padding:12px;background-color:#211F26;border-radius:18px;flex-direction:column;}
+.selected-date{font-size:18px;color:#D0BCFF;height:26px;}
+.selected-event{font-size:20px;color:#E6E0E9;height:29px;text-overflow:ellipsis;}
+.small{font-size:15px;color:#CAC4D0;margin-top:6px;}
+.scope-item{width:336px;height:288px;}
+.foot-content{width:304px;margin-left:16px;padding:8px;flex-direction:column;}
+.scope{font-size:20px;color:#D0BCFF;height:36px;}
+.sync{font-size:19px;color:#D0BCFF;margin-top:12px;height:40px;}
+.back-item{width:336px;height:56px;}
+.back{font-size:21px;color:#D0BCFF;margin-left:20px;height:56px;}
+.detail-head-item{width:336px;height:210px;}
+.detail-head{width:296px;margin-left:20px;flex-direction:column;}
+.detail-date{font-size:24px;color:#E6E0E9;height:38px;}
+.detail-lunar{font-size:19px;color:#D0BCFF;height:34px;}
+.detail-status{font-size:20px;color:#E6E0E9;height:55px;}
+.event-item{width:336px;}
+.event-content{width:304px;margin-left:16px;padding:12px;flex-direction:column;background-color:#211F26;border-radius:16px;}
+.event-kind{font-size:16px;height:25px;}
+.event-name{font-size:22px;width:280px;color:#E6E0E9;margin-top:4px;}
+.event-country{font-size:16px;width:280px;height:50px;color:#CAC4D0;margin-top:5px;}
+.empty-item{width:336px;height:88px;}
+.empty{font-size:21px;color:#CAC4D0;margin-left:24px;}
+.notice-item{width:336px;height:290px;}
+.notice{width:288px;margin-left:24px;padding-top:12px;flex-direction:column;}
+.pager-item{width:336px;height:68px;}
+.pager{width:304px;margin-left:16px;height:60px;align-items:center;justify-content:space-between;}
+.page-button{width:100px;font-size:20px;color:#D0BCFF;text-align:center;height:52px;}
+.page-label{font-size:17px;color:#CAC4D0;}
+.legal-source{width:336px;height:280px;}
+.legal-item{width:336px;height:210px;}
+.legal-text{width:288px;margin-left:24px;margin-top:12px;font-size:18px;color:#CAC4D0;}
+</style>

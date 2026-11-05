@@ -1,0 +1,38 @@
+{
+  "package": "com.bandcalendar.sync",
+  "name": "腕上日曆",
+  "versionName": "0.2.0",
+  "versionCode": 6,
+  "minAPILevel": 1,
+  "minPlatformVersion": 1200,
+  "icon": "/common/icon.png",
+  "deviceTypeList": [
+    "watch"
+  ],
+  "features": [
+    {
+      "name": "system.interconnect"
+    },
+    {
+      "name": "system.storage"
+    },
+    {
+      "name": "system.device"
+    }
+  ],
+  "config": {
+    "logLevel": "error",
+    "designWidth": 336
+  },
+  "display": {
+    "backgroundColor": "#090F14"
+  },
+  "router": {
+    "entry": "pages/index",
+    "pages": {
+      "pages/index": {
+        "component": "index"
+      }
+    }
+  }
+}
